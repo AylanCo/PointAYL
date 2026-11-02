@@ -1,0 +1,1443 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aylan.co - Luxury Café Loyalty & Membership System (Real-Time)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Plus Jakarta Sans -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- QRCode.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- Html5-Qrcode Library untuk Scan Kamera -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+    <!-- Supabase JS Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Plus Jakarta Sans', 'sans-serif'],
+                    },
+                    colors: {
+                        darkBg: '#0f1115',
+                        darkSurface: '#161920',
+                        darkCard: '#1e222d',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #0f1115;
+            color: #f3f4f6;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .perspective-1000 { perspective: 1000px; }
+        .transform-style-3d { transform-style: preserve-3d; }
+
+        .amex-card {
+            box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.7), inset 0 1px 2px rgba(255, 255, 255, 0.5);
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.1s ease-out;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .amex-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: -150%; width: 150%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+            transform: skewX(-20deg);
+            animation: shine 5s infinite;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        @keyframes shine {
+            0% { left: -150%; }
+            20% { left: 150%; }
+            100% { left: 150%; }
+        }
+
+        .card-silhouette-watermark {
+            position: absolute;
+            right: -10%; top: 50%;
+            transform: translateY(-50%) rotate(-5deg);
+            width: 250px; height: 250px;
+            opacity: 0.48; mix-blend-mode: overlay;
+            filter: contrast(150%) brightness(120%);
+            pointer-events: none; z-index: 2; object-fit: contain;
+        }
+
+        /* Desain Tier Kartu Mewah dan Elegan Tanpa Chip */
+        .card-basic {
+            background: linear-gradient(135deg, #451a03 0%, #78350f 50%, #92400e 100%);
+            color: #fef3c7;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+        .card-silver {
+            background: linear-gradient(135deg, #334155 0%, #64748b 50%, #94a3b8 100%);
+            color: #f8fafc;
+            border: 1px solid rgba(226, 232, 240, 0.4);
+            box-shadow: 0 20px 40px -15px rgba(100, 116, 139, 0.4), inset 0 1px 3px rgba(255, 255, 255, 0.4);
+        }
+        .card-gold {
+            background: linear-gradient(135deg, #78350f 0%, #b45309 30%, #fbbf24 70%, #d97706 100%);
+            color: #fffbeb;
+            border: 1px solid rgba(253, 224, 71, 0.6);
+            box-shadow: 0 20px 40px -15px rgba(217, 119, 6, 0.5), inset 0 1px 3px rgba(255, 255, 255, 0.6);
+        }
+        .card-platinum {
+            background: linear-gradient(135deg, #09090b 0%, #18181b 30%, #3b0764 70%, #6b21a8 100%);
+            color: #f3e8ff;
+            border: 1px solid rgba(216, 180, 254, 0.6);
+            box-shadow: 0 25px 50px -12px rgba(107, 33, 168, 0.7), inset 0 1px 4px rgba(255, 255, 255, 0.7);
+        }
+
+        .card-3d-wrap { transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1); }
+        .text-shadow { text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+        #reader { border: none !important; border-radius: 1rem; overflow: hidden; }
+        #reader video { border-radius: 1rem; object-fit: cover; }
+    </style>
+</head>
+<body class="bg-[#0f1115] text-gray-100 font-sans min-h-screen flex flex-col justify-between selection:bg-amber-500 selection:text-slate-950">
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- MAIN APPLICATION WRAPPER -->
+    <div id="app" class="flex-1 flex flex-col min-h-0">
+
+        <!-- ==================== VIEW 1: LOGIN MEMBER ==================== -->
+        <div id="view-login" class="flex-1 flex flex-col justify-center items-center p-6 relative">
+            <div class="absolute w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
+            
+            <div class="max-w-md w-full bg-[#161920] border border-slate-800 rounded-3xl p-8 shadow-2xl space-y-6 relative z-10">
+                <div class="text-center space-y-3">
+                    <div class="inline-flex p-1 rounded-full bg-gradient-to-tr from-amber-600 via-amber-400 to-amber-100 shadow-lg shadow-slate-900/40 mb-1">
+                        <img src="LogoAy.jpg" alt="Aylan.co Logo" class="w-40 h-40 rounded-full object-cover border-2 border-[#0f1115]" onerror="this.src='https://placehold.co/100x100/78350f/fef3c7?text=AYLAN.CO'">
+                    </div>
+                    <h1 class="font-bold text-3xl tracking-wide text-slate-100">AYLAN.CO</h1>
+                    <p class="text-xs tracking-widest uppercase text-slate-400">Café & Eatery • Royalty Member Portal</p>
+                </div>
+
+                <div class="space-y-4 pt-2">
+                    <div class="space-y-1">
+                        <label class="text-xs font-semibold text-slate-300 uppercase tracking-wider">Nomor Telepon Member</label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 pl-4 flex items-center text-slate-500"><i class="fa-solid fa-phone"></i></span>
+                            <input type="tel" id="login-phone" placeholder="Contoh: 08123456789" class="w-full pl-11 pr-4 py-3 bg-[#1e222d] border border-slate-700/80 rounded-xl text-white placeholder-slate-500 text-sm focus:outline-none focus:border-amber-500 transition">
+                        </div>
+                    </div>
+
+                    <div class="space-y-1">
+                        <label class="text-xs font-semibold text-slate-300 uppercase tracking-wider">PIN Member (4-6 Digit)</label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 pl-4 flex items-center text-slate-500"><i class="fa-solid fa-lock"></i></span>
+                            <input type="password" id="login-pin" maxlength="6" placeholder="••••••" class="w-full pl-11 pr-12 py-3 bg-[#1e222d] border border-slate-700/80 rounded-xl text-white placeholder-slate-500 text-sm focus:outline-none focus:border-amber-500 transition">
+                            <button type="button" onmousedown="togglePasswordVisibility('login-pin', true)" onmouseup="togglePasswordVisibility('login-pin', false)" onmouseleave="togglePasswordVisibility('login-pin', false)" ontouchstart="togglePasswordVisibility('login-pin', true)" ontouchend="togglePasswordVisibility('login-pin', false)" class="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-white" title="Tahan untuk intip PIN">
+                                <i class="fa-solid fa-eye text-sm"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <button onclick="handleMemberLogin()" class="w-full py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-extrabold rounded-xl text-sm shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-right-to-bracket"></i> Masuk Member Dashboard
+                    </button>
+                </div>
+
+                <div class="pt-4 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+                    <span>Belum terdaftar? Hubungi kasir kami.</span>
+                    <button onclick="openCashierLoginModal()" class="text-slate-400 hover:text-amber-400 font-mono tracking-tighter transition flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-slate-800/60" title="Akses Portal Kasir">
+                        <i class="fa-solid fa-terminal text-[11px]"></i> Kasir_Aylan.Co
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== VIEW 2: MEMBER DASHBOARD ==================== -->
+        <div id="view-member" class="flex-1 hidden flex flex-col bg-[#0f1115] overflow-y-auto">
+            <header class="bg-[#161920]/90 backdrop-blur border-b border-slate-800 px-6 py-4 flex justify-between items-center sticky top-0 z-30">
+                <div class="flex items-center gap-3">
+                    <img src="LogoAy.jpg" alt="Logo Cafe" class="w-12 h-12 rounded-full object-cover border border-amber-500/50" onerror="this.src='https://placehold.co/100x100/78350f/fef3c7?text=AYLAN'">
+                    <div>
+                        <h2 class="font-bold text-slate-100 text-base" id="member-header-name">Nama Member</h2>
+                        <span class="text-[10px] tracking-wider uppercase bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full font-semibold border border-slate-700" id="member-header-tier">Tier: Basic</span>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="openChangeMemberPinModal()" class="px-3 py-2 bg-[#1e222d] hover:bg-slate-800 text-amber-400 hover:text-amber-300 rounded-xl text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition">
+                        <i class="fa-solid fa-key"></i> Ubah PIN
+                    </button>
+                    <button onclick="logout()" class="px-3 py-2 bg-[#1e222d] hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition">
+                        <i class="fa-solid fa-arrow-right-from-bracket"></i> Keluar
+                    </button>
+                </div>
+            </header>
+
+            <div class="max-w-4xl w-full mx-auto p-4 sm:p-6 space-y-8 flex-1">
+                <div class="flex flex-col items-center justify-center py-2">
+                    <p class="text-xs text-slate-400 mb-3 tracking-widest uppercase flex items-center gap-1.5"><i class="fa-solid fa-hand-pointer text-amber-500 animate-pulse"></i> Kartu Loyalty Member 3D</p>
+                    
+                    <div id="card-3d-container" class="perspective-1000 w-full max-w-[380px] h-[225px] cursor-pointer">
+                        <div id="membership-card-element" class="card-3d-wrap amex-card relative w-full h-full rounded-2xl p-6 transform-style-3d transition-all duration-300 card-basic flex flex-col justify-between">
+                            <img src="LAY.jpg" alt="Aylan Full Silhouette Watermark" class="card-silhouette-watermark" onerror="this.src='https://placehold.co/200x200/ffffff/000000?text=AYLAN'">
+
+                            <div class="flex justify-between items-start relative z-10">
+                                <div>
+                                    <span class="text-[9px] font-mono tracking-widest uppercase opacity-75 block">AYLAN.CO ROYALTY CARD</span>
+                                    <span class="font-bold text-base tracking-wider" id="card-tier-title">BASIC CARD</span>
+                                </div>
+                                <div class="w-11 h-11 rounded-full bg-black/30 backdrop-blur border border-white/40 flex items-center justify-center overflow-hidden shadow-md">
+                                    <img src="LogoAy.jpg" alt="Aylan Crest Logo" class="w-full h-full object-cover opacity-95 mix-blend-screen" onerror="this.src='https://placehold.co/100x100/78350f/fef3c7?text=AYLAN'">
+                                </div>
+                            </div>
+
+                            <div class="my-2 relative z-10">
+                                <span class="font-mono text-xl tracking-widest font-bold text-shadow" id="card-member-id">AYL-1001</span>
+                            </div>
+
+                            <div class="flex justify-between items-end relative z-10 pt-2 border-t border-current/10">
+                                <div>
+                                    <span class="text-[9px] uppercase tracking-wider opacity-70 block">Cardholder</span>
+                                    <span class="font-extrabold text-sm tracking-wide truncate max-w-[190px] block" id="card-member-name">Nama Member</span>
+                                </div>
+                                <div class="text-right">
+                                    <span class="text-[9px] uppercase tracking-wider opacity-70 block">Total Poin</span>
+                                    <span class="font-extrabold text-base font-mono" id="card-member-points">0 Pts</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="bg-[#161920] border border-slate-800 p-5 rounded-2xl flex items-center gap-4">
+                        <div class="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-coins"></i>
+                        </div>
+                        <div>
+                            <span class="text-xs text-slate-400 block uppercase font-semibold">Poin Saat Ini</span>
+                            <span class="text-xl font-bold text-slate-100 font-mono" id="stat-points">0</span>
+                        </div>
+                    </div>
+                    <div class="bg-[#161920] border border-slate-800 p-5 rounded-2xl flex items-center gap-4">
+                        <div class="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-crown"></i>
+                        </div>
+                        <div>
+                            <span class="text-xs text-slate-400 block uppercase font-semibold">Golongan Tier</span>
+                            <span class="text-xl font-bold text-slate-100 capitalize" id="stat-tier">Basic</span>
+                        </div>
+                    </div>
+                    <div class="bg-[#161920] border border-slate-800 p-5 rounded-2xl flex items-center gap-4">
+                        <div class="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-qrcode"></i>
+                        </div>
+                        <div>
+                            <span class="text-xs text-slate-400 block uppercase font-semibold">QR Code Unik</span>
+                            <button onclick="openMemberQrModal()" class="text-xs text-amber-400 font-bold hover:underline mt-0.5 inline-block">Tampilkan QR Member <i class="fa-solid fa-arrow-right ml-1"></i></button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- RIWAYAT / LOG AKTIVITAS KHUSUS MEMBER -->
+                <div class="bg-[#161920] border border-slate-800 rounded-3xl p-6 space-y-4">
+                    <div class="flex justify-between items-center">
+                        <h3 class="font-bold text-white text-base flex items-center gap-2">
+                            <i class="fa-solid fa-clock-rotate-left text-amber-500"></i> Riwayat Aktivitas & Poin Saya
+                        </h3>
+                        <span class="text-xs text-slate-400">Mutasi poin real-time</span>
+                    </div>
+                    <div id="member-activity-list" class="space-y-2 max-h-60 overflow-y-auto pr-1">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+                    <div class="flex justify-between items-center">
+                        <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                            <i class="fa-solid fa-gift text-amber-500"></i> Katalog Penukaran Poin (Redeem)
+                        </h3>
+                        <span class="text-xs text-slate-400">Tukar poin dengan produk pilihan</span>
+                    </div>
+
+                    <div id="member-redeem-list" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== VIEW 3: CASHIER DASHBOARD ==================== -->
+        <div id="view-cashier" class="flex-1 hidden flex flex-col bg-[#0f1115] overflow-hidden">
+            <header class="bg-[#161920] border-b border-slate-800 px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0">
+                <div class="flex items-center gap-3">
+                    <img src="LogoAy.jpg" alt="Logo Kasir" class="w-12 h-12 rounded-full object-cover border border-amber-500/50" onerror="this.src='https://placehold.co/100x100/78350f/fef3c7?text=AYLAN'">
+                    <div>
+                        <h2 class="font-bold text-white text-base">Aylan.co Cashier Portal</h2>
+                        <span class="text-xs text-amber-400 font-mono" id="cashier-logged-info">Kasir: Staf Kasir</span>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap gap-2 bg-[#0f1115] p-1.5 rounded-xl border border-slate-800">
+                    <button onclick="switchCashierTab('scan')" id="tab-btn-scan" class="px-4 py-2 rounded-lg text-xs font-bold bg-amber-500 text-slate-950 transition">Scan & Transaksi</button>
+                    <button onclick="switchCashierTab('members')" id="tab-btn-members" class="px-4 py-2 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition">Data Member</button>
+                    <button onclick="switchCashierTab('activities')" id="tab-btn-activities" class="px-4 py-2 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition">Log Aktivitas</button>
+                    <button onclick="switchCashierTab('settings')" id="tab-btn-settings" class="px-4 py-2 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition">Atur Redeem</button>
+                    <button onclick="switchCashierTab('cashiers')" id="tab-btn-cashiers" class="px-4 py-2 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition">Akun Kasir</button>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <button onclick="openChangeCashierPinModal()" class="px-3 py-2 bg-[#1e222d] hover:bg-slate-800 text-amber-400 rounded-xl text-xs font-semibold border border-slate-700 transition"><i class="fa-solid fa-key"></i> PIN</button>
+                    <button onclick="logout()" class="px-3 py-2 bg-[#1e222d] hover:bg-slate-800 text-red-400 rounded-xl text-xs font-semibold border border-slate-700 transition"><i class="fa-solid fa-right-from-bracket"></i> Keluar</button>
+                </div>
+            </header>
+
+            <div id="cashier-tab-content" class="flex-1 p-4 sm:p-6 overflow-y-auto">
+                <!-- Tab content rendered dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== SUPABASE & APP SCRIPT ==================== -->
+    <script>
+        // KONFIGURASI SUPABASE ANDA
+        const SUPABASE_URL = 'https://jdbrvpdijlcmnouexvll.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpkYnJ2cGRpamxjbW5vdWV4dmxsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MzYwNzczOSwiZXhwIjoyMTA5MTgzNzM5fQ.Yp0dt06DklZ04J-zIFv9n6zItgNPkA5C9K-3GzO0SPY';
+        
+        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        let state = {
+            currentUser: null,
+            members: [],
+            cashiers: [],
+            redeemItems: [],
+            activities: [],
+            activeCashierTab: 'scan',
+            html5QrCode: null,
+            scannedMember: null
+        };
+
+        async function initApp() {
+            await fetchAllData();
+            setupRealtimeSubscriptions();
+        }
+
+        async function fetchAllData() {
+            try {
+                const [resM, resC, resR, resA] = await Promise.all([
+                    supabaseClient.from('members').select('*'),
+                    supabaseClient.from('cashiers').select('*'),
+                    supabaseClient.from('redeem_items').select('*'),
+                    supabaseClient.from('activities').select('*').order('created_at', { ascending: false }).limit(100)
+                ]);
+
+                if (resM.data) state.members = resM.data;
+                if (resC.data) state.cashiers = resC.data;
+                if (resR.data) state.redeemItems = resR.data;
+                if (resA.data) state.activities = resA.data;
+
+                if (state.currentUser && state.currentUser.type === 'member') {
+                    const updated = state.members.find(m => m.id === state.currentUser.data.id);
+                    if (updated) {
+                        state.currentUser.data = updated;
+                        renderMemberDashboard();
+                    }
+                }
+            } catch (err) {
+                console.error("Gagal mengambil data dari Supabase:", err);
+            }
+        }
+
+        function setupRealtimeSubscriptions() {
+            supabaseClient.channel('public-db-changes')
+                .on('postgres_changes', { event: '*', schema: 'public' }, async () => {
+                    await fetchAllData();
+                    if (state.currentUser && state.currentUser.type === 'cashier') {
+                        renderCashierDashboardContent();
+                    }
+                    if (state.currentUser && state.currentUser.type === 'member') {
+                        renderMemberDashboard();
+                    }
+                })
+                .subscribe();
+        }
+
+        async function logActivity(type, description) {
+            const act = {
+                id: 'ACT-' + Date.now().toString().slice(-6),
+                time: new Date().toLocaleString('id-ID'),
+                type: type,
+                description: description
+            };
+            await supabaseClient.from('activities').insert([act]);
+        }
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const bgColors = {
+                success: 'bg-emerald-600 border-emerald-500 text-white',
+                error: 'bg-rose-600 border-rose-500 text-white',
+                info: 'bg-sky-600 border-sky-500 text-white',
+                warning: 'bg-amber-600 border-amber-500 text-slate-950'
+            };
+            
+            toast.className = `pointer-events-auto px-4 py-3 rounded-xl border shadow-xl text-xs font-bold flex items-center gap-3 transition-all transform translate-y-2 opacity-0 ${bgColors[type] || bgColors.success}`;
+            toast.innerHTML = `
+                <i class="fa-solid ${type === 'success' ? 'fa-circle-check text-base' : type === 'error' ? 'fa-triangle-exclamation text-base' : 'fa-circle-info text-base'}"></i>
+                <span class="flex-1">${message}</span>
+            `;
+            container.appendChild(toast);
+
+            setTimeout(() => toast.classList.remove('translate-y-2', 'opacity-0'), 10);
+            setTimeout(() => {
+                toast.classList.add('translate-y-2', 'opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        }
+
+        function togglePasswordVisibility(id, show) {
+            const input = document.getElementById(id);
+            if (input) input.type = show ? 'text' : 'password';
+        }
+
+        function switchView(viewName) {
+            document.getElementById('view-login').classList.add('hidden');
+            document.getElementById('view-member').classList.add('hidden');
+            document.getElementById('view-cashier').classList.add('hidden');
+
+            if (viewName === 'login') {
+                document.getElementById('view-login').classList.remove('hidden');
+                stopQrScanner();
+            } else if (viewName === 'member') {
+                document.getElementById('view-member').classList.remove('hidden');
+                renderMemberDashboard();
+            } else if (viewName === 'cashier') {
+                document.getElementById('view-cashier').classList.remove('hidden');
+                renderCashierDashboard();
+            }
+        }
+
+        async function handleMemberLogin() {
+            const phone = document.getElementById('login-phone').value.trim();
+            const pin = document.getElementById('login-pin').value.trim();
+
+            if (!phone || !pin) {
+                showToast('Masukkan nomor telepon dan PIN dengan lengkap!', 'error');
+                return;
+            }
+
+            const member = state.members.find(m => m.phone === phone && m.pin === pin);
+            if (!member) {
+                showToast('Nomor telepon atau PIN salah!', 'error');
+                return;
+            }
+
+            state.currentUser = { type: 'member', data: member };
+            showToast(`Selamat datang kembali, ${member.name}!`, 'success');
+            switchView('member');
+        }
+
+        function logout() {
+            state.currentUser = null;
+            stopQrScanner();
+            switchView('login');
+            showToast('Berhasil keluar sesi.', 'info');
+        }
+
+        function calculateTier(points) {
+            if (points >= 330) return 'platinum';
+            if (points >= 220) return 'gold';
+            if (points >= 100) return 'silver';
+            return 'basic';
+        }
+
+        function renderMemberDashboard() {
+            if (!state.currentUser || state.currentUser.type !== 'member') return;
+            const member = state.currentUser.data;
+            const currentMember = state.members.find(m => m.id === member.id) || member;
+            state.currentUser.data = currentMember;
+
+            document.getElementById('member-header-name').textContent = currentMember.name;
+            document.getElementById('member-header-tier').textContent = `Tier: ${currentMember.tier.toUpperCase()}`;
+
+            document.getElementById('card-member-name').textContent = currentMember.name;
+            document.getElementById('card-member-id').textContent = currentMember.id;
+            document.getElementById('card-member-points').textContent = currentMember.points + ' Pts';
+            document.getElementById('card-tier-title').textContent = `${currentMember.tier.toUpperCase()} CARD`;
+
+            const cardEl = document.getElementById('membership-card-element');
+            cardEl.className = `card-3d-wrap amex-card relative w-full h-full rounded-2xl p-6 transform-style-3d transition-all duration-300 card-${currentMember.tier} flex flex-col justify-between`;
+
+            document.getElementById('stat-points').textContent = currentMember.points;
+            document.getElementById('stat-tier').textContent = currentMember.tier;
+
+            renderMemberActivityList(currentMember.id);
+            renderMemberRedeemCatalog();
+        }
+
+        function renderMemberActivityList(memberId) {
+            const container = document.getElementById('member-activity-list');
+            if (!container) return;
+
+            const memberActivities = state.activities.filter(act => 
+                act.description.includes(memberId) || (state.currentUser && act.description.includes(state.currentUser.data.name))
+            );
+
+            if (memberActivities.length === 0) {
+                container.innerHTML = '<div class="text-center py-6 text-slate-500 text-xs">Belum ada riwayat aktivitas tercatat untuk akun Anda.</div>';
+                return;
+            }
+
+            container.innerHTML = memberActivities.map(act => `
+                <div class="bg-[#0f1115] border border-slate-800/80 p-3 rounded-xl flex justify-between items-center text-xs">
+                    <div class="space-y-1">
+                        <div class="flex items-center gap-2">
+                            <span class="px-2 py-0.5 rounded text-[9px] font-bold font-mono ${act.type === 'REDEEM' ? 'bg-amber-500/20 text-amber-400' : 'bg-emerald-500/20 text-emerald-400'}">${act.type}</span>
+                            <span class="text-slate-400 text-[10px] font-mono">${act.time}</span>
+                        </div>
+                        <p class="text-slate-200 font-medium">${act.description}</p>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderMemberRedeemCatalog() {
+            const container = document.getElementById('member-redeem-list');
+            if (!container) return;
+            const memberPoints = state.currentUser.data.points;
+
+            container.innerHTML = state.redeemItems.map(item => {
+                const canAfford = memberPoints >= item.points;
+                return `
+                    <div class="bg-[#161920] border border-slate-800 rounded-2xl overflow-hidden flex flex-col justify-between shadow-lg">
+                        <div>
+                            <div class="h-36 w-full overflow-hidden relative bg-slate-800">
+                                <img src="${item.image}" alt="${item.name}" class="w-full h-full object-cover" onerror="this.src='https://placehold.co/300x200/1e222d/f3f4f6?text=AYLAN+CAFE'">
+                                <span class="absolute top-3 right-3 bg-black/70 backdrop-blur text-amber-400 font-mono text-xs font-bold px-2.5 py-1 rounded-full border border-amber-500/30">
+                                    ${item.points} Pts
+                                </span>
+                            </div>
+                            <div class="p-4 space-y-1">
+                                <h4 class="font-bold text-white text-sm">${item.name}</h4>
+                                <p class="text-xs text-slate-400 leading-relaxed">${item.desc}</p>
+                            </div>
+                        </div>
+                        <div class="p-4 pt-0">
+                            <button onclick="redeemItem('${item.id}')" ${canAfford ? '' : 'disabled'} class="w-full py-2.5 rounded-xl font-bold text-xs transition flex items-center justify-center gap-1.5 ${canAfford ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md shadow-amber-500/20 cursor-pointer' : 'bg-slate-800 text-slate-500 cursor-not-allowed'}">
+                                <i class="fa-solid fa-ticket"></i> ${canAfford ? 'Tukar Poin Sekarang' : 'Poin Belum Cukup'}
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function redeemItem(itemId) {
+            const item = state.redeemItems.find(i => i.id === itemId);
+            const member = state.currentUser.data;
+
+            if (member.points < item.points) {
+                showToast('Poin Anda tidak mencukupi untuk penukaran ini.', 'error');
+                return;
+            }
+
+            if (confirm(`Tukar ${item.points} poin dengan "${item.name}"?`)) {
+                const newPoints = member.points - item.points;
+                const newTier = calculateTier(newPoints);
+
+                const { error } = await supabaseClient
+                    .from('members')
+                    .update({ points: newPoints, tier: newTier })
+                    .eq('id', member.id);
+
+                if (!error) {
+                    await logActivity('REDEEM', `Member ${member.name} (${member.id}) menukar ${item.points} poin untuk ${item.name}`);
+                    showToast(`Berhasil menukar ${item.name}! Tunjukkan layar ini ke kasir.`, 'success');
+                    await fetchAllData();
+                } else {
+                    showToast('Gagal memproses penukaran poin.', 'error');
+                }
+            }
+        }
+
+        const cardContainer = document.getElementById('card-3d-container');
+        if (cardContainer) {
+            cardContainer.addEventListener('mousemove', (e) => {
+                const rect = cardContainer.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                const dx = (x - rect.width / 2) / 15;
+                const dy = (rect.height / 2 - y) / 15;
+                const card = document.getElementById('membership-card-element');
+                if (card) card.style.transform = `rotateY(${dx}deg) rotateX(${dy}deg) scale(1.02)`;
+            });
+            cardContainer.addEventListener('mouseleave', () => {
+                const card = document.getElementById('membership-card-element');
+                if (card) card.style.transform = 'rotateY(0deg) rotateX(0deg) scale(1)';
+            });
+        }
+
+        function openCashierLoginModal() {
+            const modalHtml = `
+                <div id="modal-cashier-login" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                    <div class="bg-[#161920] border border-slate-800 rounded-3xl max-w-sm w-full p-6 space-y-5 shadow-2xl relative">
+                        <div class="flex justify-between items-center">
+                            <h3 class="font-bold text-white text-base flex items-center gap-2"><i class="fa-solid fa-terminal text-amber-500"></i> Login Portal Kasir</h3>
+                            <button onclick="closeModal('modal-cashier-login')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+                        </div>
+                        <div class="space-y-4">
+                            <div class="space-y-1">
+                                <label class="text-xs font-semibold text-slate-300 uppercase">Username Kasir</label>
+                                <input type="text" id="cashier-user" placeholder="Contoh: kasir1" class="w-full px-4 py-2.5 bg-[#1e222d] border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-xs font-semibold text-slate-300 uppercase">PIN Kasir</label>
+                                <input type="password" id="cashier-pin" placeholder="••••" class="w-full px-4 py-2.5 bg-[#1e222d] border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500">
+                            </div>
+                            <button onclick="handleCashierLoginSubmit()" class="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-sm transition shadow-lg shadow-amber-500/20">Masuk Kasir</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+        }
+
+        function handleCashierLoginSubmit() {
+            const user = document.getElementById('cashier-user').value.trim();
+            const pin = document.getElementById('cashier-pin').value.trim();
+            const cashier = state.cashiers.find(c => c.username === user && c.pin === pin);
+
+            if (!cashier) {
+                showToast('Username atau PIN kasir salah!', 'error');
+                return;
+            }
+
+            state.currentUser = { type: 'cashier', data: cashier };
+            closeModal('modal-cashier-login');
+            switchView('cashier');
+            showToast(`Login Kasir Berhasil (${cashier.name})`, 'success');
+        }
+
+        function closeModal(id) {
+            const el = document.getElementById(id);
+            if (el) el.remove();
+        }
+
+        function switchCashierTab(tab) {
+            state.activeCashierTab = tab;
+            ['scan', 'members', 'activities', 'settings', 'cashiers'].forEach(t => {
+                const btn = document.getElementById(`tab-btn-${t}`);
+                if (btn) {
+                    btn.className = t === tab ? 'px-4 py-2 rounded-lg text-xs font-bold bg-amber-500 text-slate-950 transition' : 'px-4 py-2 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition';
+                }
+            });
+            if (tab !== 'scan') stopQrScanner();
+            renderCashierDashboardContent();
+        }
+
+        function renderCashierDashboard() {
+            if (state.currentUser && state.currentUser.type === 'cashier') {
+                document.getElementById('cashier-logged-info').textContent = `Kasir: ${state.currentUser.data.name}`;
+            }
+            switchCashierTab(state.activeCashierTab);
+        }
+
+        function renderCashierDashboardContent() {
+            const container = document.getElementById('cashier-tab-content');
+            if (!container) return;
+            const tab = state.activeCashierTab;
+
+            if (tab === 'scan') {
+                container.innerHTML = `
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
+                        <div class="bg-[#161920] border border-slate-800 rounded-3xl p-6 space-y-6 flex flex-col">
+                            <h3 class="font-bold text-white text-base flex items-center gap-2"><i class="fa-solid fa-qrcode text-amber-500"></i> Identifikasi Member</h3>
+                            <div class="flex gap-2">
+                                <input type="text" id="cashier-search-input" placeholder="Cari No. Telp atau ID (cth: AYL-1001)" class="flex-1 px-4 py-2.5 bg-[#1e222d] border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500">
+                                <button onclick="searchMemberByInput()" class="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-amber-400 font-bold rounded-xl text-xs transition border border-slate-700">Cari</button>
+                            </div>
+                            <div class="relative flex items-center justify-center my-2">
+                                <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-slate-800"></div></div>
+                                <span class="relative bg-[#161920] px-3 text-[10px] text-slate-500 uppercase tracking-widest">Atau Scan QR Kamera</span>
+                            </div>
+                            <div class="flex-1 flex flex-col items-center justify-center bg-[#0f1115] border border-slate-800 rounded-2xl p-4 min-h-[240px]">
+                                <div id="reader" class="w-full max-w-xs"></div>
+                                <div id="scanner-controls" class="mt-3 flex gap-2">
+                                    <button onclick="startQrScanner()" class="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs transition shadow"><i class="fa-solid fa-camera mr-1"></i> Mulai Kamera</button>
+                                    <button onclick="stopQrScanner()" class="px-4 py-2 bg-slate-800 hover:bg-white/10 text-slate-300 font-bold rounded-xl text-xs transition"><i class="fa-solid fa-stop mr-1"></i> Matikan</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-[#161920] border border-slate-800 rounded-3xl p-6 space-y-6 flex flex-col justify-between">
+                            <div>
+                                <h3 class="font-bold text-white text-base flex items-center gap-2 mb-4"><i class="fa-solid fa-cash-register text-amber-500"></i> Panel Transaksi & Poin</h3>
+                                <div id="selected-member-panel" class="bg-[#0f1115] border border-slate-800 rounded-2xl p-4 mb-6">
+                                    <div class="text-center py-6 text-slate-500 text-xs">
+                                        <i class="fa-solid fa-user-slash text-2xl mb-2 opacity-40 block"></i>
+                                        Belum ada member yang dipilih / di-scan.
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="transaction-action-panel" class="space-y-4 opacity-50 pointer-events-none">
+                                <div class="space-y-1">
+                                    <label class="text-xs font-semibold text-slate-300 uppercase">Total Transaksi Bill (Rp)</label>
+                                    <input type="number" id="trans-amount" placeholder="Contoh: 150000" class="w-full px-4 py-3 bg-[#1e222d] border border-slate-700 rounded-xl text-white font-mono text-sm focus:outline-none focus:border-amber-500">
+                                    <span class="text-[10px] text-slate-400">*Otomatis mendapat 1 poin setiap kelipatan Rp 10.000</span>
+                                </div>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <button onclick="processTransaction('add')" class="py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition shadow-lg flex items-center justify-center gap-1">
+                                        <i class="fa-solid fa-plus"></i> Tambah Poin Transaksi
+                                    </button>
+                                    <button onclick="processTransaction('redeem_manual')" class="py-3 bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold rounded-xl text-xs transition shadow-lg flex items-center justify-center gap-1">
+                                        <i class="fa-solid fa-ticket"></i> Redeem Produk Kasir
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else if (tab === 'members') {
+                container.innerHTML = `
+                    <div class="bg-[#161920] border border-slate-800 rounded-3xl p-6 space-y-6 flex flex-col h-full">
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                            <div>
+                                <h3 class="font-bold text-white text-base">Database Seluruh Member Aylan.co</h3>
+                                <p class="text-xs text-slate-400">Total terdaftar: ${state.members.length} member</p>
+                            </div>
+                            <button onclick="openAddMemberModal()" class="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-md">
+                                <i class="fa-solid fa-user-plus"></i> Tambah Member Baru
+                            </button>
+                        </div>
+                        <div class="flex-1 overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="border-b border-slate-800 text-xs text-slate-400 uppercase font-semibold">
+                                        <th class="py-3 px-4">ID Member</th>
+                                        <th class="py-3 px-4">Nama Lengkap</th>
+                                        <th class="py-3 px-4">No. Telepon</th>
+                                        <th class="py-3 px-4">Tier</th>
+                                        <th class="py-3 px-4">Poin</th>
+                                        <th class="py-3 px-4 text-right">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-800/60 text-xs">
+                                    ${state.members.map(m => `
+                                        <tr class="hover:bg-slate-800/40 transition">
+                                            <td class="py-3.5 px-4 font-mono font-bold text-amber-400">${m.id}</td>
+                                            <td class="py-3.5 px-4 font-semibold text-white">${m.name}</td>
+                                            <td class="py-3.5 px-4 font-mono text-slate-300">${m.phone}</td>
+                                            <td class="py-3.5 px-4 uppercase"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">${m.tier}</span></td>
+                                            <td class="py-3.5 px-4 font-mono font-bold text-amber-400">${m.points} Pts</td>
+                                            <td class="py-3.5 px-4 text-right space-x-2">
+                                                <button onclick="openEditMemberModal('${m.id}')" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition" title="Edit Member"><i class="fa-solid fa-pen"></i></button>
+                                                <button onclick="deleteMember('${m.id}')" class="px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg transition" title="Hapus Member"><i class="fa-solid fa-trash"></i></button>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+            } else if (tab === 'activities') {
+                container.innerHTML = `
+                    <div class="bg-[#161920] border border-slate-800 rounded-3xl p-6 space-y-6 flex flex-col h-full">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <h3 class="font-bold text-white text-base">Log Aktivitas & Transaksi Café</h3>
+                                <p class="text-xs text-slate-400">Riwayat mutasi poin secara real-time</p>
+                            </div>
+                        </div>
+                        <div class="flex-1 overflow-y-auto space-y-2 pr-2">
+                            ${state.activities.length === 0 ? '<div class="text-center py-10 text-slate-500 text-xs">Belum ada aktivitas tercatat.</div>' : state.activities.map(act => `
+                                <div class="bg-[#0f1115] border border-slate-800/80 p-4 rounded-2xl flex justify-between items-center text-xs">
+                                    <div class="space-y-1">
+                                        <div class="flex items-center gap-2">
+                                            <span class="px-2 py-0.5 rounded text-[9px] font-bold font-mono ${act.type === 'REDEEM' ? 'bg-amber-500/20 text-amber-400' : 'bg-emerald-500/20 text-emerald-400'}">${act.type}</span>
+                                            <span class="text-slate-400 text-[10px] font-mono">${act.time}</span>
+                                        </div>
+                                        <p class="text-slate-200 font-medium">${act.description}</p>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            } else if (tab === 'settings') {
+                container.innerHTML = `
+                    <div class="bg-[#161920] border border-slate-800 rounded-3xl p-6 space-y-6 flex flex-col h-full">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <h3 class="font-bold text-white text-base">Pengaturan Katalog Redeem</h3>
+                                <p class="text-xs text-slate-400">Tambah atau ubah produk penukaran poin member</p>
+                            </div>
+                            <button onclick="openAddRedeemModal()" class="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-md">
+                                <i class="fa-solid fa-plus"></i> Tambah Item Redeem
+                            </button>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 overflow-y-auto pr-2">
+                            ${state.redeemItems.map(item => `
+                                <div class="bg-[#0f1115] border border-slate-800 rounded-2xl p-4 flex flex-col justify-between space-y-3">
+                                    <div>
+                                        <div class="h-28 w-full rounded-xl overflow-hidden mb-2 relative bg-slate-800">
+                                            <img src="${item.image}" alt="${item.name}" class="w-full h-full object-cover">
+                                        </div>
+                                        <h4 class="font-bold text-white text-sm">${item.name}</h4>
+                                        <p class="text-xs text-amber-400 font-mono font-bold mt-0.5">${item.points} Poin</p>
+                                        <p class="text-[11px] text-slate-400 mt-1">${item.desc}</p>
+                                    </div>
+                                    <div class="flex gap-2 pt-2 border-t border-slate-800">
+                                        <button onclick="deleteRedeemItem('${item.id}')" class="w-full py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 font-bold rounded-xl text-xs transition">Hapus Item</button>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            } else if (tab === 'cashiers') {
+                container.innerHTML = `
+                    <div class="bg-[#161920] border border-slate-800 rounded-3xl p-6 space-y-6 flex flex-col h-full">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <h3 class="font-bold text-white text-base">Manajemen Akun Kasir</h3>
+                                <p class="text-xs text-slate-400">Daftar staf yang memiliki hak akses kasir</p>
+                            </div>
+                            <button onclick="openAddCashierModal()" class="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-md">
+                                <i class="fa-solid fa-user-plus"></i> Tambah Akun Kasir
+                            </button>
+                        </div>
+                        <div class="flex-1 overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="border-b border-slate-800 text-xs text-slate-400 uppercase font-semibold">
+                                        <th class="py-3 px-4">Username</th>
+                                        <th class="py-3 px-4">Nama Lengkap Staf</th>
+                                        <th class="py-3 px-4 text-right">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-800/60 text-xs">
+                                    ${state.cashiers.map(c => `
+                                        <tr class="hover:bg-slate-800/40 transition">
+                                            <td class="py-3.5 px-4 font-mono font-bold text-amber-400">${c.username}</td>
+                                            <td class="py-3.5 px-4 font-semibold text-white">${c.name}</td>
+                                            <td class="py-3.5 px-4 text-right">
+                                                <button onclick="deleteCashier('${c.username}')" class="px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg transition"><i class="fa-solid fa-trash"></i></button>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        function startQrScanner() {
+            const readerEl = document.getElementById('reader');
+            if (!readerEl) return;
+            if (state.html5QrCode) stopQrScanner();
+
+            state.html5QrCode = new Html5Qrcode("reader");
+            state.html5QrCode.start(
+                { facingMode: "environment" },
+                { fps: 10, qrbox: { width: 200, height: 200 } },
+                (decodedText) => {
+                    handleScannedCode(decodedText);
+                    stopQrScanner();
+                },
+                () => {}
+            ).catch(err => showToast('Gagal mengakses kamera: ' + err, 'error'));
+        }
+
+        function stopQrScanner() {
+            if (state.html5QrCode) {
+                state.html5QrCode.stop().then(() => {
+                    state.html5QrCode.clear();
+                    state.html5QrCode = null;
+                }).catch(() => state.html5QrCode = null);
+            }
+        }
+
+        function handleScannedCode(code) {
+            let memberId = code.trim();
+            if (code.includes('AYL-')) {
+                const match = code.match(/AYL-\d+/);
+                if (match) memberId = match[0];
+            }
+            const member = state.members.find(m => m.id === memberId);
+            if (member) {
+                selectScannedMember(member);
+                showToast(`Member ditemukan: ${member.name}`, 'success');
+            } else {
+                showToast(`Member "${code}" tidak ditemukan!`, 'error');
+            }
+        }
+
+        function searchMemberByInput() {
+            const query = document.getElementById('cashier-search-input').value.trim().toLowerCase();
+            if (!query) return;
+            const member = state.members.find(m => m.id.toLowerCase() === query || m.phone === query);
+            if (member) {
+                selectScannedMember(member);
+                showToast(`Member ditemukan: ${member.name}`, 'success');
+            } else {
+                showToast('Member tidak ditemukan.', 'error');
+            }
+        }
+
+        function selectScannedMember(member) {
+            state.scannedMember = member;
+            const panel = document.getElementById('selected-member-panel');
+            const actionPanel = document.getElementById('transaction-action-panel');
+            if (!panel) return;
+
+            panel.innerHTML = `
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-sm">
+                            <i class="fa-solid fa-user"></i>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-white text-sm">${member.name}</h4>
+                            <span class="text-[10px] font-mono text-amber-400">${member.id} • ${member.phone}</span>
+                        </div>
+                    </div>
+                    <span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-800 text-slate-200 uppercase">${member.tier}</span>
+                </div>
+                <div class="mt-4 pt-3 border-t border-slate-800 flex justify-between items-center text-xs">
+                    <span class="text-slate-400">Poin Tersedia:</span>
+                    <span class="font-mono font-bold text-base text-amber-400">${member.points} Pts</span>
+                </div>
+            `;
+            if (actionPanel) actionPanel.classList.remove('opacity-50', 'pointer-events-none');
+        }
+
+        async function processTransaction(type) {
+            if (!state.scannedMember) return;
+            const member = state.members.find(m => m.id === state.scannedMember.id);
+            if (!member) return;
+
+            if (type === 'add') {
+                const amountInput = document.getElementById('trans-amount');
+                const amount = parseFloat(amountInput.value);
+                if (isNaN(amount) || amount <= 0) {
+                    showToast('Masukkan nominal transaksi yang valid!', 'error');
+                    return;
+                }
+
+                const earnedPoints = Math.floor(amount / 4000);
+                if (earnedPoints <= 0) {
+                    showToast('Transaksi minimum Rp 4.000 untuk mendapat poin.', 'warning');
+                    return;
+                }
+
+                const newPoints = member.points + earnedPoints;
+                const newTier = calculateTier(newPoints);
+
+                const { error } = await supabaseClient.from('members').update({ points: newPoints, tier: newTier }).eq('id', member.id);
+                if (!error) {
+                    await logActivity('TRANSAKSI', `Menambahkan ${earnedPoints} poin untuk ${member.name} (${member.id}) dari transaksi Rp ${amount.toLocaleString('id-ID')}`);
+                    showToast(`Berhasil menambahkan ${earnedPoints} poin!`, 'success');
+                    amountInput.value = '';
+                    await fetchAllData();
+                    selectScannedMember(state.members.find(m => m.id === member.id));
+                }
+            } else if (type === 'redeem_manual') {
+                openCashierRedeemModal(member);
+            }
+        }
+
+        function openMemberQrModal() {
+            const member = state.currentUser.data;
+            const modalHtml = `
+                <div id="modal-member-qr" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                    <div class="bg-[#161920] border border-slate-800 rounded-3xl max-w-sm w-full p-6 space-y-5 shadow-2xl text-center relative">
+                        <div class="flex justify-between items-center">
+                            <h3 class="font-bold text-white text-base">QR Code Unik Member</h3>
+                            <button onclick="closeModal('modal-member-qr')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+                        </div>
+                        <div class="bg-white p-4 rounded-2xl inline-block shadow-lg" id="member-qrcode-box"></div>
+                        <div class="space-y-1">
+                            <p class="font-bold text-white text-sm">${member.name}</p>
+                            <p class="text-xs font-mono text-amber-500">${member.id}</p>
+                        </div>
+                        <button onclick="closeModal('modal-member-qr')" class="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-xs transition">Tutup</button>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            setTimeout(() => {
+                const box = document.getElementById('member-qrcode-box');
+                box.innerHTML = '';
+                new QRCode(box, { text: member.id, width: 180, height: 180, colorDark: "#0f1115", colorLight: "#ffffff" });
+            }, 50);
+        }
+
+        function openChangeMemberPinModal() {
+            const modalHtml = `
+                <div id="modal-change-pin" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                    <div class="bg-[#161920] border border-slate-800 rounded-3xl max-w-sm w-full p-6 space-y-4 shadow-2xl relative">
+                        <div class="flex justify-between items-center">
+                            <h3 class="font-bold text-white text-base">Ubah PIN Member</h3>
+                            <button onclick="closeModal('modal-change-pin')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+                        </div>
+                        <div class="space-y-3">
+                            <div class="space-y-1">
+                                <label class="text-xs font-semibold text-slate-300 uppercase">PIN Lama</label>
+                                <input type="password" id="old-pin" placeholder="••••" class="w-full px-4 py-2.5 bg-[#1e222d] border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-xs font-semibold text-slate-300 uppercase">PIN Baru (4-6 Digit)</label>
+                                <input type="password" id="new-pin" maxlength="6" placeholder="••••••" class="w-full px-4 py-2.5 bg-[#1e222d] border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500">
+                            </div>
+                            <button onclick="submitChangeMemberPin()" class="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs transition">Simpan PIN Baru</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+        }
+
+        async function submitChangeMemberPin() {
+            const oldPin = document.getElementById('old-pin').value.trim();
+            const newPin = document.getElementById('new-pin').value.trim();
+            const member = state.currentUser.data;
+
+            if (oldPin !== member.pin) {
+                showToast('PIN lama tidak sesuai!', 'error');
+                return;
+            }
+            if (!newPin || newPin.length < 4) {
+                showToast('PIN baru minimal 4 digit!', 'error');
+                return;
+            }
+
+            const { error } = await supabaseClient
+                .from('members')
+                .update({ pin: newPin })
+                .eq('id', member.id);
+
+            if (!error) {
+                member.pin = newPin;
+                closeModal('modal-change-pin');
+                showToast('PIN member berhasil diperbarui!', 'success');
+                await fetchAllData();
+            } else {
+                showToast('Gagal memperbarui PIN di database: ' + error.message, 'error');
+            }
+        }
+
+        function openChangeCashierPinModal() {
+            const cashier = state.currentUser.data;
+            const modalHtml = `
+                <div id="modal-change-cashier-pin" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                    <div class="bg-[#161920] border border-slate-800 rounded-3xl max-w-sm w-full p-6 space-y-4 shadow-2xl relative">
+                        <div class="flex justify-between items-center">
+                            <h3 class="font-bold text-white text-base">Ubah PIN Kasir (${cashier.username})</h3>
+                            <button onclick="closeModal('modal-change-cashier-pin')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+                        </div>
+                        <div class="space-y-3">
+                            <div class="space-y-1">
+                                <label class="text-xs font-semibold text-slate-300 uppercase">PIN Lama Kasir</label>
+                                <input type="password" id="c-old-pin" placeholder="••••" class="w-full px-4 py-2.5 bg-[#1e222d] border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-xs font-semibold text-slate-300 uppercase">PIN Baru Kasir</label>
+                                <input type="password" id="c-new-pin" placeholder="••••" class="w-full px-4 py-2.5 bg-[#1e222d] border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500">
+                            </div>
+                            <button onclick="submitChangeCashierPin()" class="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs transition">Simpan PIN Kasir</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+        }
+
+        async function submitChangeCashierPin() {
+            const oldPin = document.getElementById('c-old-pin').value.trim();
+            const newPin = document.getElementById('c-new-pin').value.trim();
+            const cashier = state.currentUser.data;
+
+            if (oldPin !== cashier.pin) {
+                showToast('PIN lama kasir tidak sesuai!', 'error');
+                return;
+            }
+            if (!newPin) {
+                showToast('PIN baru tidak boleh kosong!', 'error');
+                return;
+            }
+
+            const { error } = await supabaseClient
+                .from('cashiers')
+                .update({ pin: newPin })
+                .eq('username', cashier.username);
+
+            if (!error) {
+                cashier.pin = newPin;
+                closeModal('modal-change-cashier-pin');
+                showToast('PIN kasir berhasil diperbarui!', 'success');
+                await fetchAllData();
+            } else {
+                showToast('Gagal memperbarui PIN kasir: ' + error.message, 'error');
+            }
+        }
+
+        // ==================== TAMBAH MEMBER DENGAN INPUT ID MANUAL ====================
+        function openAddMemberModal() {
+            const suggestedId = 'AYL-' + (1000 + state.members.length + 1);
+            const modalHtml = `
+                <div id="modal-add-member" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                    <div class="bg-[#161920] border border-slate-800 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
+                        <div class="flex justify-between items-center">
+                            <h3 class="font-bold text-white text-base flex items-center gap-2"><i class="fa-solid fa-user-plus text-amber-500"></i> Registrasi Member Baru</h3>
+                            <button onclick="closeModal('modal-add-member')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+                        </div>
+                        <div class="space-y-3">
+                            <div class="space-y-1">
+                                <label class="text-xs font-semibold text-slate-300 uppercase">ID Member (Dapat Diubah)</label>
+                                <input type="text" id="new-m-id" value="${suggestedId}" class="w-full px-4 py-2.5 bg-[#1e222d] border border-slate-700 rounded-xl text-amber-400 font-mono text-sm focus:outline-none focus:border-amber-500">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-xs font-semibold text-slate-300 uppercase">Nama Lengkap</label>
+                                <input type="text" id="new-m-name" placeholder="Nama Lengkap" class="w-full px-4 py-2.5 bg-[#1e222d] border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-xs font-semibold text-slate-300 uppercase">Nomor Telepon (WhatsApp)</label>
+                                <input type="tel" id="new-m-phone" placeholder="Contoh: 08123456789" class="w-full px-4 py-2.5 bg-[#1e222d] border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-xs font-semibold text-slate-300 uppercase">PIN Member</label>
+                                <input type="password" id="new-m-pin" value="1234" maxlength="6" class="w-full px-4 py-2.5 bg-[#1e222d] border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500">
+                            </div>
+                            <button onclick="submitAddMember()" class="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs transition shadow-md">Daftar Member Baru</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+        }
+
+        async function submitAddMember() {
+            const id = document.getElementById('new-m-id').value.trim();
+            const name = document.getElementById('new-m-name').value.trim();
+            const phone = document.getElementById('new-m-phone').value.trim();
+            const pin = document.getElementById('new-m-pin').value.trim();
+            const initialPoints = 0;
+            const initialTier = calculateTier(initialPoints);
+
+            if (!id || !name || !phone || !pin) {
+                showToast('Semua kolom data member wajib diisi!', 'error');
+                return;
+            }
+
+            const existing = state.members.find(m => m.id === id);
+            if (existing) {
+                showToast(`ID Member "${id}" sudah digunakan. Gunakan ID lain.`, 'error');
+                return;
+            }
+
+            const { error } = await supabaseClient.from('members').insert([{ id, name, phone, pin, points: initialPoints, tier: initialTier }]);
+            if (!error) {
+                closeModal('modal-add-member');
+                showToast('Member berhasil ditambahkan!', 'success');
+                await fetchAllData();
+                renderCashierDashboard();
+            } else {
+                showToast('Gagal mendaftarkan member: ' + error.message, 'error');
+            }
+        }
+
+        // ==================== EDIT MEMBER PADA KASIR (POIN TERKUNCI) ====================
+        function openEditMemberModal(id) {
+            const member = state.members.find(m => m.id === id);
+            if (!member) return;
+
+            const modalHtml = `
+                <div id="modal-edit-member" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                    <div class="bg-[#161920] border border-slate-800 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
+                        <div class="flex justify-between items-center">
+                            <h3 class="font-bold text-white text-base flex items-center gap-2"><i class="fa-solid fa-user-pen text-amber-500"></i> Edit Data Member</h3>
+                            <button onclick="closeModal('modal-edit-member')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+                        </div>
+                        <div class="space-y-3">
+                            <div class="space-y-1">
+                                <label class="text-xs font-semibold text-slate-300 uppercase">ID Member (Tetap)</label>
+                                <input type="text" id="edit-m-id" value="${member.id}" disabled class="w-full px-4 py-2.5 bg-[#0f1115] border border-slate-800 rounded-xl text-amber-400 font-mono text-sm cursor-not-allowed">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-xs font-semibold text-slate-300 uppercase">Nama Lengkap</label>
+                                <input type="text" id="edit-m-name" value="${member.name}" class="w-full px-4 py-2.5 bg-[#1e222d] border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-xs font-semibold text-slate-300 uppercase">Nomor Telepon</label>
+                                <input type="tel" id="edit-m-phone" value="${member.phone}" class="w-full px-4 py-2.5 bg-[#1e222d] border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-xs font-semibold text-slate-300 uppercase">PIN Member</label>
+                                <input type="text" id="edit-m-pin" value="${member.pin}" maxlength="6" class="w-full px-4 py-2.5 bg-[#1e222d] border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-xs font-semibold text-slate-300 uppercase">Jumlah Poin Member (Terkunci)</label>
+                                <input type="text" value="${member.points} Pts (${member.tier.toUpperCase()})" disabled class="w-full px-4 py-2.5 bg-[#0f1115] border border-slate-800 rounded-xl text-amber-400 font-mono text-sm cursor-not-allowed">
+                                <span class="text-[10px] text-slate-400">*Poin hanya dapat bertambah dari transaksi kasir atau berkurang melalui penukaran (redeem).</span>
+                            </div>
+                            <button onclick="submitEditMember()" class="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs transition shadow-md">Simpan Perubahan Member</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+        }
+
+        async function submitEditMember() {
+            const id = document.getElementById('edit-m-id').value;
+            const name = document.getElementById('edit-m-name').value.trim();
+            const phone = document.getElementById('edit-m-phone').value.trim();
+            const pin = document.getElementById('edit-m-pin').value.trim();
+
+            if (!name || !phone || !pin) {
+                showToast('Semua bidang data member wajib diisi dengan benar!', 'error');
+                return;
+            }
+
+            const { error } = await supabaseClient
+                .from('members')
+                .update({
+                    name: name,
+                    phone: phone,
+                    pin: pin
+                })
+                .eq('id', id);
+
+            if (!error) {
+                closeModal('modal-edit-member');
+                showToast(`Data member ${id} berhasil diperbarui!`, 'success');
+                await fetchAllData();
+                renderCashierDashboard();
+            } else {
+                showToast('Gagal memperbarui data member: ' + error.message, 'error');
+            }
+        }
+
+        async function deleteMember(id) {
+            if (confirm(`Hapus member ${id}?`)) {
+                await supabaseClient.from('members').delete().eq('id', id);
+                showToast('Member dihapus.', 'info');
+                await fetchAllData();
+                renderCashierDashboard();
+            }
+        }
+
+        function openAddRedeemModal() {
+            const modalHtml = `
+                <div id="modal-add-redeem" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                    <div class="bg-[#161920] border border-slate-800 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
+                        <div class="flex justify-between items-center">
+                            <h3 class="font-bold text-white text-base">Tambah Item Katalog Redeem</h3>
+                            <button onclick="closeModal('modal-add-redeem')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+                        </div>
+                        <div class="space-y-3">
+                            <div class="space-y-1">
+                                <label class="text-xs font-semibold text-slate-300 uppercase">Nama Produk / Reward</label>
+                                <input type="text" id="r-name" placeholder="Contoh: Free Ice Cream" class="w-full px-4 py-2.5 bg-[#1e222d] border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-xs font-semibold text-slate-300 uppercase">Jumlah Poin Dibutuhkan</label>
+                                <input type="number" id="r-points" placeholder="150" class="w-full px-4 py-2.5 bg-[#1e222d] border border-slate-700 rounded-xl text-white font-mono text-sm focus:outline-none focus:border-amber-500">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-xs font-semibold text-slate-300 uppercase">Deskripsi Singkat</label>
+                                <input type="text" id="r-desc" placeholder="Deskripsi produk reward" class="w-full px-4 py-2.5 bg-[#1e222d] border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-xs font-semibold text-slate-300 uppercase">Unggah Foto Menu (Dari Perangkat)</label>
+                                <input type="file" id="r-file" accept="image/*" class="w-full px-3 py-2 bg-[#1e222d] border border-slate-700 rounded-xl text-white text-xs file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-amber-500 file:text-slate-950 hover:file:bg-amber-400 cursor-pointer">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-xs font-semibold text-slate-300 uppercase">Atau Masukkan URL Gambar (Opsional)</label>
+                                <input type="text" id="r-image" placeholder="https://images.unsplash.com/..." class="w-full px-4 py-2.5 bg-[#1e222d] border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500">
+                            </div>
+                            <button onclick="submitAddRedeemItem()" class="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-sm transition shadow-md">Simpan Item Katalog</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+        }
+
+        async function submitAddRedeemItem() {
+            const name = document.getElementById('r-name').value.trim();
+            const points = parseInt(document.getElementById('r-points').value);
+            const desc = document.getElementById('r-desc').value.trim();
+            const fileInput = document.getElementById('r-file');
+            const urlInput = document.getElementById('r-image').value.trim();
+
+            if (!name || isNaN(points) || points <= 0) {
+                showToast('Nama produk dan jumlah poin wajib diisi dengan benar!', 'error');
+                return;
+            }
+
+            let imageUrl = urlInput || 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=300&auto=format&fit=crop&q=60';
+
+            if (fileInput.files && fileInput.files[0]) {
+                const file = fileInput.files[0];
+                try {
+                    imageUrl = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = (e) => resolve(e.target.result);
+                        reader.onerror = (e) => reject(e);
+                        reader.readAsDataURL(file);
+                    });
+                } catch (err) {
+                    showToast('Gagal membaca file gambar yang diunggah.', 'error');
+                    return;
+                }
+            }
+
+            const id = 'R' + Date.now().toString().slice(-4);
+
+            const { error } = await supabaseClient.from('redeem_items').insert([{
+                id: id,
+                name: name,
+                points: points,
+                "desc": desc,
+                image: imageUrl
+            }]);
+
+            if (!error) {
+                closeModal('modal-add-redeem');
+                showToast('Item redeem baru berhasil ditambahkan!', 'success');
+                await fetchAllData();
+                renderCashierDashboard();
+            } else {
+                showToast('Gagal menyimpan ke database Supabase: ' + error.message, 'error');
+            }
+        }
+
+        async function deleteRedeemItem(id) {
+            if (confirm('Hapus item ini?')) {
+                await supabaseClient.from('redeem_items').delete().eq('id', id);
+                showToast('Item dihapus.', 'info');
+                await fetchAllData();
+                renderCashierDashboard();
+            }
+        }
+
+        function openAddCashierModal() {
+            const modalHtml = `
+                <div id="modal-add-cashier" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                    <div class="bg-[#161920] border border-slate-800 rounded-3xl max-w-sm w-full p-6 space-y-4 shadow-2xl relative">
+                        <div class="flex justify-between items-center">
+                            <h3 class="font-bold text-white text-base">Tambah Akun Kasir</h3>
+                            <button onclick="closeModal('modal-add-cashier')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+                        </div>
+                        <div class="space-y-3">
+                            <input type="text" id="c-user" placeholder="Username" class="w-full px-4 py-2.5 bg-[#1e222d] border border-slate-700 rounded-xl text-white text-sm">
+                            <input type="text" id="c-name" placeholder="Nama Staf" class="w-full px-4 py-2.5 bg-[#1e222d] border border-slate-700 rounded-xl text-white text-sm">
+                            <input type="password" id="c-pin" placeholder="PIN" class="w-full px-4 py-2.5 bg-[#1e222d] border border-slate-700 rounded-xl text-white text-sm">
+                            <button onclick="submitAddCashier()" class="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs">Simpan</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+        }
+
+        async function submitAddCashier() {
+            const username = document.getElementById('c-user').value.trim();
+            const name = document.getElementById('c-name').value.trim();
+            const pin = document.getElementById('c-pin').value.trim();
+
+            const { error } = await supabaseClient.from('cashiers').insert([{ username, name, pin }]);
+            if (!error) {
+                closeModal('modal-add-cashier');
+                showToast('Kasir ditambahkan!', 'success');
+                await fetchAllData();
+                renderCashierDashboard();
+            }
+        }
+
+        async function deleteCashier(username) {
+            if (username === 'admin') {
+                showToast('Admin utama tidak dapat dihapus!', 'error');
+                return;
+            }
+            if (confirm(`Hapus kasir ${username}?`)) {
+                await supabaseClient.from('cashiers').delete().eq('username', username);
+                showToast('Kasir dihapus.', 'info');
+                await fetchAllData();
+                renderCashierDashboard();
+            }
+        }
+
+        function openCashierRedeemModal(member) {
+            const modalHtml = `
+                <div id="modal-cashier-redeem" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                    <div class="bg-[#161920] border border-slate-800 rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl relative">
+                        <div class="flex justify-between items-center">
+                            <h3 class="font-bold text-white text-base">Redeem Poin untuk ${member.name} (${member.points} Pts)</h3>
+                            <button onclick="closeModal('modal-cashier-redeem')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[60vh] overflow-y-auto pr-1">
+                            ${state.redeemItems.map(item => `
+                                <div class="bg-[#0f1115] border border-slate-800 p-3 rounded-xl flex flex-col justify-between space-y-2">
+                                    <div>
+                                        <h4 class="font-bold text-white text-xs">${item.name}</h4>
+                                        <p class="text-[11px] text-amber-400 font-mono font-bold">${item.points} Poin</p>
+                                    </div>
+                                    <button onclick="executeCashierRedeem('${member.id}', '${item.id}')" ${member.points >= item.points ? '' : 'disabled'} class="w-full py-2 rounded-lg text-xs font-bold ${member.points >= item.points ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 cursor-pointer' : 'bg-slate-800 text-slate-500 cursor-not-allowed'}">
+                                        ${member.points >= item.points ? 'Proses Redeem' : 'Poin Kurang'}
+                                    </button>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+        }
+
+        async function executeCashierRedeem(memberId, itemId) {
+            const member = state.members.find(m => m.id === memberId);
+            const item = state.redeemItems.find(i => i.id === itemId);
+            if (!member || !item || member.points < item.points) return;
+
+            const newPoints = member.points - item.points;
+            const newTier = calculateTier(newPoints);
+
+            const { error } = await supabaseClient.from('members').update({ points: newPoints, tier: newTier }).eq('id', memberId);
+            if (!error) {
+                await logActivity('REDEEM', `Penukaran ${item.name} (${item.points} pts) oleh Kasir untuk member ${member.name} (${member.id})`);
+                closeModal('modal-cashier-redeem');
+                showToast(`Berhasil redeem ${item.name} untuk ${member.name}!`, 'success');
+                await fetchAllData();
+                selectScannedMember(state.members.find(m => m.id === memberId));
+            } else {
+                showToast('Gagal memproses redeem poin.', 'error');
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', initApp);
+    </script>
+</body>
+</html>
